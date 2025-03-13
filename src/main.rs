@@ -1,10 +1,8 @@
-use std::collections::HashMap;
 use std::io;
 
-mod memory;
 mod store;
 
-//use store::memory::{Action, Command};
+use store::memory::KeyValueStore;
 
 use std::str::FromStr;
 
@@ -55,7 +53,7 @@ impl Command {
 
 fn main() {
     let mut input = String::new();
-    let mut map = HashMap::<String, String>::new();
+    let mut store = KeyValueStore::<String, String>::new();
 
     loop {
         input.clear();
@@ -74,7 +72,9 @@ fn main() {
 
         match command.action {
             Action::Set => {
-                map.insert(command.key.clone(), command.val.clone().unwrap());
+                store
+                    .data
+                    .insert(command.key.clone(), command.val.clone().unwrap());
                 println!(
                     "inserted key: {}, value: {}",
                     command.key,
@@ -82,7 +82,11 @@ fn main() {
                 );
             }
             Action::Get => {
-                let val = map.get(&command.key).expect("Failed to get value").clone();
+                let val = store
+                    .data
+                    .get(&command.key)
+                    .expect("Failed to get value")
+                    .clone();
                 println!("Value: {}", val);
             }
         };
