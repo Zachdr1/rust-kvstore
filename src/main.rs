@@ -9,7 +9,7 @@ use std::str::FromStr;
 #[derive(Debug)]
 pub struct Command {
     pub action: Action,
-    pub key: String,
+    pub key: Option<String>,
     pub val: Option<String>,
 }
 
@@ -17,6 +17,8 @@ pub struct Command {
 pub enum Action {
     Set,
     Get,
+    Del,
+    Exit,
 }
 
 impl FromStr for Action {
@@ -26,6 +28,8 @@ impl FromStr for Action {
         match s {
             "set" => Ok(Action::Set),
             "get" => Ok(Action::Get),
+            "del" => Ok(Action::Del),
+            "exit" => Ok(Action::Exit),
             _ => Err(()),
         }
     }
@@ -36,7 +40,10 @@ impl Command {
         let action_str = args.next().ok_or("Didn't get a command")?;
         let action = action_str.parse::<Action>().map_err(|_| "Invalid action")?;
 
-        let key = args.next().ok_or("Didn't get a key")?.to_string();
+        let key = match action {
+            Action::Exit => None,
+            _ => Some(args.next().ok_or("Didn't get a key")?.to_string()),
+        };
 
         let val = match action {
             Action::Set => Some(
@@ -45,6 +52,8 @@ impl Command {
                     .to_string(),
             ),
             Action::Get => None,
+            Action::Del => None,
+            Action::Exit => None,
         };
 
         Ok(Command { action, key, val })
@@ -54,7 +63,6 @@ impl Command {
 fn main() {
     let mut input = String::new();
     let mut store = KeyValueStore::<String, String>::new();
-
     loop {
         input.clear();
         if let Err(e) = io::stdin().read_line(&mut input) {
@@ -72,23 +80,27 @@ fn main() {
 
         match command.action {
             Action::Set => {
-                store
-                    .data
-                    .insert(command.key.clone(), command.val.clone().unwrap());
+                store.insert(command.key.clone().unwrap(), command.val.clone().unwrap());
                 println!(
                     "inserted key: {}, value: {}",
-                    command.key,
+                    command.key.unwrap(),
                     command.val.unwrap()
                 );
             }
             Action::Get => {
                 let val = store
-                    .data
-                    .get(&command.key)
+                    .get(&command.key.unwrap())
                     .expect("Failed to get value")
                     .clone();
                 println!("Value: {}", val);
             }
+            Action::Del => {
+                store.remove(&command.key.clone().unwrap());
+                println!("Deleted: {}", &command.key.clone().unwrap())
+            }
+            Action::Exit => break,
         };
     }
+
+    //store.save::<E>();
 }
