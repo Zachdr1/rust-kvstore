@@ -62,7 +62,9 @@ impl Command {
 
 fn main() {
     let mut input = String::new();
-    let mut store = KeyValueStore::<String, String>::new();
+    let mut store = KeyValueStore::<String, String>::new("mystore.json");
+    store = store.load().expect("Failed to load");
+    println!("Enter a command:");
     loop {
         input.clear();
         if let Err(e) = io::stdin().read_line(&mut input) {
@@ -88,11 +90,13 @@ fn main() {
                 );
             }
             Action::Get => {
-                let val = store
-                    .get(&command.key.unwrap())
-                    .expect("Failed to get value")
-                    .clone();
-                println!("Value: {}", val);
+                if let Some(value) = store.get(&command.key.unwrap()) {
+                    let val = value;
+                    println!("Value: {}", val);
+                } else {
+                    println!("Failed to get value");
+                    continue;
+                }
             }
             Action::Del => {
                 store.remove(&command.key.clone().unwrap());
@@ -102,5 +106,6 @@ fn main() {
         };
     }
 
-    //store.save::<E>();
+    let _ = store.save();
+    println!("saved to {}", store.file_path)
 }
