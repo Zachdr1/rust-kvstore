@@ -1,8 +1,8 @@
 use std::io;
 
-mod store;
+mod storage;
 
-use store::memory::KeyValueStore;
+use storage::kvstore::{HashMapBackend, KeyValueStore};
 
 use std::str::FromStr;
 
@@ -62,8 +62,9 @@ impl Command {
 
 fn main() {
     let mut input = String::new();
-    let mut store = KeyValueStore::<String, String>::new("mystore.json");
-    store = store.load().expect("Failed to load");
+    let mut store: KeyValueStore<HashMapBackend<String, String>, String, String> =
+        KeyValueStore::new("mystore.json");
+    store.load().expect("Failed to load");
     println!("Enter a command:");
     loop {
         input.clear();
@@ -107,5 +108,5 @@ fn main() {
     }
 
     let _ = store.save();
-    println!("saved to {}", store.file_path)
+    println!("saved")
 }
