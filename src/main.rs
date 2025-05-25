@@ -18,6 +18,7 @@ pub enum Action {
     Set,
     Get,
     Del,
+    Load,
     Exit,
 }
 
@@ -30,6 +31,7 @@ impl FromStr for Action {
             "get" => Ok(Action::Get),
             "del" => Ok(Action::Del),
             "exit" => Ok(Action::Exit),
+            "load" => Ok(Action::Load),
             _ => Err(()),
         }
     }
@@ -51,9 +53,7 @@ impl Command {
                     .ok_or("Didn't get a value for 'set' command")?
                     .to_string(),
             ),
-            Action::Get => None,
-            Action::Del => None,
-            Action::Exit => None,
+            _ => None,
         };
 
         Ok(Command { action, key, val })
@@ -63,7 +63,7 @@ impl Command {
 fn main() {
     let mut input = String::new();
     let mut store: KeyValueStore<HashMapBackend<String, String>, String, String> =
-        KeyValueStore::new("mystore.json");
+        KeyValueStore::new("default.json");
     store.load().expect("Failed to load");
     println!("Enter a command:");
     loop {
@@ -102,6 +102,10 @@ fn main() {
             Action::Del => {
                 store.remove(&command.key.clone().unwrap());
                 println!("Deleted: {}", &command.key.clone().unwrap())
+            }
+            Action::Load => {
+                store = KeyValueStore::new(&command.key.unwrap());
+                store.load().expect("Failed to load");
             }
             Action::Exit => break,
         };
