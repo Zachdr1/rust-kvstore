@@ -4,6 +4,7 @@ mod storage;
 
 use storage::hashmap::HashMapBackend;
 use storage::kvstore::KeyValueStore;
+use storage::log_storage::SimpleLogBackend;
 
 use std::str::FromStr;
 
@@ -63,7 +64,9 @@ impl Command {
 
 fn main() {
     let mut input = String::new();
-    let mut store: KeyValueStore<HashMapBackend<String, String>, String, String> =
+    // let mut store: KeyValueStore<HashMapBackend<String, String>, String, String> =
+    //     KeyValueStore::new("default.json");
+    let mut store: KeyValueStore<SimpleLogBackend<String, String>, String, String> =
         KeyValueStore::new("default.json");
     println!("Enter a command:");
     loop {

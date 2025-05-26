@@ -1,91 +1,80 @@
-// use super::kvstore::{Backend, KeyValueStore};
-// use serde::{Deserialize, Serialize};
-// use std::collections::HashMap;
-// use std::fs::{read_to_string, File};
-// use std::path::Path;
-//
-// pub struct LogStorageBackend<K, V> {
-//     index: HashMap<K, V>,
-//     filepath: String,
-//     current_position: u64,
-// }
-//
-// impl<K, V> Backend<K, V> for LogStorageBackend<K, V>
-// where
-//     K: for<'a> Deserialize<'a> + Serialize + std::cmp::Eq + std::hash::Hash,
-//     V: for<'a> Deserialize<'a> + Serialize,
-// {
-//     fn new(filepath: &str) -> Self {
-//         if !Path::new(filepath).exists() {
-//             let _ = File::create(filepath).unwrap();
-//         }
-//
-//         let index = HashMap::<K, V>::new();
-//         let current_position = 0;
-//
-//         Self {
-//             index,
-//             filepath: filepath.to_string(),
-//             current_position,
-//         }
-//     }
-//
-//     fn insert(&mut self, key: K, val: V) -> Option<V> {
-//         let mut f = File::options().append(true).open("example.log")?;
-//         let line = format!("{}\t{}", key, val);
-//         writeln!(&mut f, line)?;
-//     }
-//
-//     fn get(&self, key: &K) -> Option<&V> {
-//         self.data.get(key)
-//     }
-//
-//     fn remove(&mut self, key: &K) -> Option<V> {
-//         self.data.remove(key)
-//     }
-//
-//     fn save(&self) -> Result<(), std::io::Error> {
-//         let json = serde_json::to_string(&self.data)?;
-//         std::fs::write(&self.filepath, json)?;
-//         Ok(())
-//     }
-//
-//     fn load(&mut self) -> Result<(), std::io::Error> {
-//         let file_content = read_to_string(&self.filepath)?;
-//         if !file_content.is_empty() {
-//             println!("Data found in {}, loading..", &self.filepath);
-//             self.data = serde_json::from_str(&file_content)?;
-//             Ok(())
-//         } else {
-//             println!("{} empty", &self.filepath);
-//             Ok(())
-//         }
-//     }
-// }
-//
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//
-//     #[test]
-//     fn test_hashmap_backend() {
-//         let mut store: KeyValueStore<HashMapBackend<String, i32>, String, i32> =
-//             KeyValueStore::new("test.json");
-//
-//         // Insert some data
-//         store.insert("key1".to_string(), 42);
-//         store.insert("key2".to_string(), 100);
-//
-//         // Save to file
-//         store.save().unwrap();
-//
-//         // Create new store and load
-//         let mut store2: KeyValueStore<HashMapBackend<String, i32>, String, i32> =
-//             KeyValueStore::new("test.json");
-//         store2.load().unwrap();
-//
-//         // Verify data was loaded
-//         assert_eq!(store2.get(&"key1".to_string()), Some(&42));
-//         assert_eq!(store2.get(&"key2".to_string()), Some(&100));
-//     }
-// }
+use super::kvstore::{Backend, KeyValueStore};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fs::{read_to_string, File, OpenOptions};
+use std::io::{BufRead, BufReader};
+use std::io::{Read, Seek, SeekFrom};
+use std::path::Path;
+
+fn parse_log_line(line: &str) -> Option<(String, String)> {
+    let mut parts = line.trim().split('\t');
+    let key = parts.next()?.to_string();
+    let value = parts.next()?.to_string();
+    Some((key, value))
+}
+
+pub struct SimpleLogBackend<K, V> {
+    index: HashMap<String, u64>,
+    current_pos: u64,
+    log_file: File,
+    _phantom: std::marker::PhantomData<(K, V)>,
+}
+
+impl<K, V> Backend<K, V> for SimpleLogBackend<K, V> {
+    fn new(filepath: &str) -> Self {
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .read(true)
+            .open(filepath)
+            .unwrap();
+
+        let mut index = HashMap::new();
+        let mut current_pos = 0u64;
+
+        file.seek(SeekFrom::Start(0)).unwrap();
+        let mut reader = BufReader::new(&file);
+        let mut line = String::new();
+        while reader.read_line(&mut line).unwrap() > 0 {
+            let line_bytes = line.len() as u64;
+
+            if let Some((key, _value)) = parse_log_line(&line) {
+                index.insert(key, current_pos);
+            }
+
+            current_pos += line_bytes;
+            line.clear()
+        }
+
+        Self {
+            index,
+            current_pos,
+            log_file: file,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+
+    fn insert(&mut self, key: K, val: V) -> Result<Option<V>, std::io::Error> {
+        // let res = self.data.insert(key, val);
+        // let json = serde_json::to_string(&self.data)?;
+        // std::fs::write(&self.filepath, json)?;
+        todo!("implement get method")
+    }
+
+    fn get(&self, key: &K) -> Option<&V> {
+        // self.data.get(key)
+        todo!("implement get method")
+    }
+
+    fn remove(&mut self, key: &K) -> Option<V> {
+        // self.data.remove(key)
+        todo!("implement remove method")
+    }
+
+    fn flush(&self) -> Result<(), std::io::Error> {
+        todo!("implement remove method")
+        // let json = serde_json::to_string(&self.data)?;
+        // std::fs::write(&self.filepath, json)?;
+        // Ok(())
+    }
+}
