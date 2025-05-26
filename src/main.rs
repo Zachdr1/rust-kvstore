@@ -2,7 +2,8 @@ use std::io;
 
 mod storage;
 
-use storage::kvstore::{HashMapBackend, KeyValueStore};
+use storage::hashmap::HashMapBackend;
+use storage::kvstore::KeyValueStore;
 
 use std::str::FromStr;
 
@@ -83,7 +84,9 @@ fn main() {
 
         match command.action {
             Action::Set => {
-                store.insert(command.key.clone().unwrap(), command.val.clone().unwrap());
+                store
+                    .insert(command.key.clone().unwrap(), command.val.clone().unwrap())
+                    .expect("Failed to write to disk");
                 println!(
                     "inserted key: {}, value: {}",
                     command.key.unwrap(),
@@ -111,6 +114,6 @@ fn main() {
         };
     }
 
-    let _ = store.save();
+    // let _ = store.save();
     println!("saved")
 }
