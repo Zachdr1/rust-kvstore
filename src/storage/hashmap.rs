@@ -1,7 +1,8 @@
 use super::kvstore::{Backend, KeyValueStore};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs::{read_to_string, File};
+use std::fs::{read_to_string, File, OpenOptions};
+use std::io::{Read, SeekFrom, Write};
 use std::path::Path;
 
 pub struct HashMapBackend<K, V>
@@ -10,7 +11,7 @@ where
     V: for<'a> Deserialize<'a> + Serialize,
 {
     data: HashMap<K, V>,
-    filepath: String,
+    file: std::fs::File,
 }
 
 impl<K, V> Backend<K, V> for HashMapBackend<K, V>
@@ -19,22 +20,29 @@ where
     V: for<'a> Deserialize<'a> + Serialize,
 {
     fn new(filepath: &str) -> Self {
-        if !Path::new(filepath).exists() {
-            let _ = File::create(filepath).unwrap();
-        }
+        let file_content = std::fs::read_to_string(filepath).unwrap_or_default();
 
-        let data = HashMap::<K, V>::new();
+        let data: HashMap<K, V> = if file_content.is_empty() {
+            HashMap::new()
+        } else {
+            serde_json::from_str(&file_content).unwrap_or_else(|_| HashMap::new())
+        };
 
-        Self {
-            data,
-            filepath: filepath.to_string(),
-        }
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true) // Create if doesn't exist
+            .truncate(true)
+            .open(filepath)
+            .expect("Cant open file");
+
+        Self { data, file }
     }
 
     fn insert(&mut self, key: K, val: V) -> Result<Option<V>, std::io::Error> {
         let res = self.data.insert(key, val);
         let json = serde_json::to_string(&self.data)?;
-        std::fs::write(&self.filepath, json)?;
+        writeln!(self.file, "{}", json)?;
         Ok(res)
     }
 
@@ -44,24 +52,6 @@ where
 
     fn remove(&mut self, key: &K) -> Option<V> {
         self.data.remove(key)
-    }
-
-    fn save(&self) -> Result<(), std::io::Error> {
-        let json = serde_json::to_string(&self.data)?;
-        std::fs::write(&self.filepath, json)?;
-        Ok(())
-    }
-
-    fn load(&mut self) -> Result<(), std::io::Error> {
-        let file_content = read_to_string(&self.filepath)?;
-        if !file_content.is_empty() {
-            println!("Data found in {}, loading..", &self.filepath);
-            self.data = serde_json::from_str(&file_content)?;
-            Ok(())
-        } else {
-            println!("{} empty", &self.filepath);
-            Ok(())
-        }
     }
 }
 
@@ -78,13 +68,9 @@ mod tests {
         store.insert("key1".to_string(), 42);
         store.insert("key2".to_string(), 100);
 
-        // Save to file
-        store.save().unwrap();
-
         // Create new store and load
         let mut store2: KeyValueStore<HashMapBackend<String, i32>, String, i32> =
             KeyValueStore::new("test.json");
-        store2.load().unwrap();
 
         // Verify data was loaded
         assert_eq!(store2.get(&"key1".to_string()), Some(&42));

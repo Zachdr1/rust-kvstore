@@ -65,7 +65,6 @@ fn main() {
     let mut input = String::new();
     let mut store: KeyValueStore<HashMapBackend<String, String>, String, String> =
         KeyValueStore::new("default.json");
-    store.load().expect("Failed to load");
     println!("Enter a command:");
     loop {
         input.clear();
@@ -108,12 +107,11 @@ fn main() {
             }
             Action::Load => {
                 store = KeyValueStore::new(&command.key.unwrap());
-                store.load().expect("Failed to load");
+                println!("loaded!");
             }
             Action::Exit => break,
         };
     }
 
-    // let _ = store.save();
     println!("saved")
 }

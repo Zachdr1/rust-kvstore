@@ -3,8 +3,6 @@ pub trait Backend<K, V> {
     fn insert(&mut self, key: K, val: V) -> Result<Option<V>, std::io::Error>;
     fn get(&self, key: &K) -> Option<&V>;
     fn remove(&mut self, key: &K) -> Option<V>;
-    fn save(&self) -> Result<(), std::io::Error>;
-    fn load(&mut self) -> Result<(), std::io::Error>;
 }
 
 pub struct KeyValueStore<B, K, V>
@@ -36,13 +34,5 @@ where
 
     pub fn remove(&mut self, key: &K) -> Option<V> {
         self.backend.remove(key)
-    }
-
-    pub fn save(&self) -> Result<(), std::io::Error> {
-        self.backend.save()
-    }
-
-    pub fn load(&mut self) -> Result<(), std::io::Error> {
-        self.backend.load()
     }
 }
