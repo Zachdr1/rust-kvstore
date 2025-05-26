@@ -1,8 +1,7 @@
 use super::kvstore::{Backend, KeyValueStore};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs::{read_to_string, File, OpenOptions};
-use std::io::{Read, SeekFrom, Write};
+use std::fs::{read_to_string, File};
 use std::path::Path;
 
 pub struct HashMapBackend<K, V>
@@ -11,7 +10,7 @@ where
     V: for<'a> Deserialize<'a> + Serialize,
 {
     data: HashMap<K, V>,
-    file: std::fs::File,
+    filepath: String,
 }
 
 impl<K, V> Backend<K, V> for HashMapBackend<K, V>
@@ -20,29 +19,31 @@ where
     V: for<'a> Deserialize<'a> + Serialize,
 {
     fn new(filepath: &str) -> Self {
-        let file_content = std::fs::read_to_string(filepath).unwrap_or_default();
-
-        let data: HashMap<K, V> = if file_content.is_empty() {
-            HashMap::new()
+        let data: HashMap<K, V>;
+        if !Path::new(filepath).exists() {
+            let _ = File::create(filepath).unwrap();
+            data = HashMap::<K, V>::new();
         } else {
-            serde_json::from_str(&file_content).unwrap_or_else(|_| HashMap::new())
-        };
+            let file_content = read_to_string(filepath).unwrap();
+            if !file_content.is_empty() {
+                println!("Data found in {}, loading..", filepath);
+                data = serde_json::from_str(&file_content).unwrap();
+            } else {
+                println!("{} empty", filepath);
+                data = HashMap::<K, V>::new();
+            }
+        }
 
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true) // Create if doesn't exist
-            .truncate(true)
-            .open(filepath)
-            .expect("Cant open file");
-
-        Self { data, file }
+        Self {
+            data,
+            filepath: filepath.to_string(),
+        }
     }
 
     fn insert(&mut self, key: K, val: V) -> Result<Option<V>, std::io::Error> {
         let res = self.data.insert(key, val);
         let json = serde_json::to_string(&self.data)?;
-        writeln!(self.file, "{}", json)?;
+        std::fs::write(&self.filepath, json)?;
         Ok(res)
     }
 
@@ -52,6 +53,12 @@ where
 
     fn remove(&mut self, key: &K) -> Option<V> {
         self.data.remove(key)
+    }
+
+    fn flush(&self) -> Result<(), std::io::Error> {
+        let json = serde_json::to_string(&self.data)?;
+        std::fs::write(&self.filepath, json)?;
+        Ok(())
     }
 }
 

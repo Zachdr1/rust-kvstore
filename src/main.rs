@@ -113,5 +113,6 @@ fn main() {
         };
     }
 
+    store.flush().expect("Failed to flush data to disk.");
     println!("saved")
 }
