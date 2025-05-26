@@ -21,13 +21,13 @@ where
     fn new(filepath: &str) -> Self {
         let data: HashMap<K, V>;
         if !Path::new(filepath).exists() {
-            let _ = File::create(filepath).unwrap();
+            let _ = File::create(filepath).expect("Unable to create file");
             data = HashMap::<K, V>::new();
         } else {
-            let file_content = read_to_string(filepath).unwrap();
+            let file_content = read_to_string(filepath).expect("Unable to read file contents");
             if !file_content.is_empty() {
                 println!("Data found in {}, loading..", filepath);
-                data = serde_json::from_str(&file_content).unwrap();
+                data = serde_json::from_str(&file_content).expect("Unable to parse data");
             } else {
                 println!("{} empty", filepath);
                 data = HashMap::<K, V>::new();
