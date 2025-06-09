@@ -16,7 +16,7 @@ where
 impl<K, V> Backend<K, V> for HashMapBackend<K, V>
 where
     K: for<'a> Deserialize<'a> + Serialize + std::cmp::Eq + std::hash::Hash,
-    V: for<'a> Deserialize<'a> + Serialize,
+    V: for<'a> Deserialize<'a> + Serialize + Copy,
 {
     fn new(filepath: &str) -> Self {
         let data: HashMap<K, V>;
@@ -47,8 +47,8 @@ where
         Ok(res)
     }
 
-    fn get(&self, key: &K) -> Option<&V> {
-        self.data.get(key)
+    fn get(&mut self, key: &K) -> Option<V> {
+        Some(self.data.get(key)?.clone())
     }
 
     fn remove(&mut self, key: &K) -> Option<V> {

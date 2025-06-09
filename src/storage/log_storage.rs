@@ -1,91 +1,107 @@
-// use super::kvstore::{Backend, KeyValueStore};
-// use serde::{Deserialize, Serialize};
-// use std::collections::HashMap;
-// use std::fs::{read_to_string, File};
-// use std::path::Path;
-//
-// pub struct LogStorageBackend<K, V> {
-//     index: HashMap<K, V>,
-//     filepath: String,
-//     current_position: u64,
-// }
-//
-// impl<K, V> Backend<K, V> for LogStorageBackend<K, V>
-// where
-//     K: for<'a> Deserialize<'a> + Serialize + std::cmp::Eq + std::hash::Hash,
-//     V: for<'a> Deserialize<'a> + Serialize,
-// {
-//     fn new(filepath: &str) -> Self {
-//         if !Path::new(filepath).exists() {
-//             let _ = File::create(filepath).unwrap();
-//         }
-//
-//         let index = HashMap::<K, V>::new();
-//         let current_position = 0;
-//
-//         Self {
-//             index,
-//             filepath: filepath.to_string(),
-//             current_position,
-//         }
-//     }
-//
-//     fn insert(&mut self, key: K, val: V) -> Option<V> {
-//         let mut f = File::options().append(true).open("example.log")?;
-//         let line = format!("{}\t{}", key, val);
-//         writeln!(&mut f, line)?;
-//     }
-//
-//     fn get(&self, key: &K) -> Option<&V> {
-//         self.data.get(key)
-//     }
-//
-//     fn remove(&mut self, key: &K) -> Option<V> {
-//         self.data.remove(key)
-//     }
-//
-//     fn save(&self) -> Result<(), std::io::Error> {
-//         let json = serde_json::to_string(&self.data)?;
-//         std::fs::write(&self.filepath, json)?;
-//         Ok(())
-//     }
-//
-//     fn load(&mut self) -> Result<(), std::io::Error> {
-//         let file_content = read_to_string(&self.filepath)?;
-//         if !file_content.is_empty() {
-//             println!("Data found in {}, loading..", &self.filepath);
-//             self.data = serde_json::from_str(&file_content)?;
-//             Ok(())
-//         } else {
-//             println!("{} empty", &self.filepath);
-//             Ok(())
-//         }
-//     }
-// }
-//
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//
-//     #[test]
-//     fn test_hashmap_backend() {
-//         let mut store: KeyValueStore<HashMapBackend<String, i32>, String, i32> =
-//             KeyValueStore::new("test.json");
-//
-//         // Insert some data
-//         store.insert("key1".to_string(), 42);
-//         store.insert("key2".to_string(), 100);
-//
-//         // Save to file
-//         store.save().unwrap();
-//
-//         // Create new store and load
-//         let mut store2: KeyValueStore<HashMapBackend<String, i32>, String, i32> =
-//             KeyValueStore::new("test.json");
-//         store2.load().unwrap();
-//
-//         // Verify data was loaded
-//         assert_eq!(store2.get(&"key1".to_string()), Some(&42));
-//         assert_eq!(store2.get(&"key2".to_string()), Some(&100));
-//     }
-// }
+use super::kvstore::Backend;
+use std::collections::HashMap;
+use std::fmt::Display;
+use std::fs::{File, OpenOptions};
+use std::io::{BufRead, BufReader, BufWriter};
+use std::io::{Seek, SeekFrom, Write};
+use std::str::FromStr;
+
+fn parse_log_line<K: FromStr>(line: &str) -> Option<(K, String)> {
+    let mut parts = line.trim().split('\t');
+    let key_str = parts.next()?.to_string();
+    let value = parts.next()?.to_string();
+    let key = key_str.parse::<K>().ok()?;
+    Some((key, value))
+}
+
+pub struct SimpleLogBackend<K, V> {
+    index: HashMap<K, u64>,
+    current_position: u64,
+    log_file: File,
+    _phantom: std::marker::PhantomData<(K, V)>,
+}
+
+impl<K, V> Backend<K, V> for SimpleLogBackend<K, V>
+where
+    K: Display + std::hash::Hash + std::cmp::Eq + FromStr,
+    V: Display + FromStr,
+{
+    fn new(filepath: &str) -> Self {
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .read(true)
+            .open(filepath)
+            .unwrap();
+
+        let mut index = HashMap::<K, u64>::new();
+        let mut current_position = 0u64;
+
+        file.seek(SeekFrom::Start(0)).unwrap();
+        let mut reader = BufReader::new(&file);
+        let mut line = String::new();
+        while reader.read_line(&mut line).unwrap() > 0 {
+            let line_bytes = line.len() as u64;
+
+            if let Some((key, value)) = parse_log_line(&line) {
+                if value == "__DELETED__" {
+                    index.remove(&key);
+                } else {
+                    index.insert(key, current_position);
+                }
+            }
+
+            current_position += line_bytes;
+            line.clear()
+        }
+
+        Self {
+            index,
+            current_position,
+            log_file: file,
+            _phantom: std::marker::PhantomData,
+        }
+    }
+
+    fn insert(&mut self, key: K, val: V) -> Result<Option<V>, std::io::Error> {
+        let mut stream = BufWriter::new(&mut self.log_file);
+        let entry = format!("{}\t{}\n", key, val);
+        let entry_bytes = entry.as_bytes();
+        write!(stream, "{}", entry)?;
+        stream.flush()?;
+
+        self.index.insert(key, self.current_position);
+        self.current_position += entry_bytes.len() as u64;
+        Ok(Some(val))
+    }
+
+    fn get(&mut self, key: &K) -> Option<V> {
+        if let Some(&position) = self.index.get(key) {
+            self.log_file.seek(SeekFrom::Start(position)).unwrap();
+            let mut reader = BufReader::new(&self.log_file);
+            let mut line_str = String::new();
+            let _ = reader.read_line(&mut line_str).unwrap();
+
+            let value = line_str.trim().split('\t').nth(1)?.parse::<V>().ok()?;
+
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    fn remove(&mut self, key: &K) -> Option<V> {
+        let entry = format!("{}\t__DELETED__\n", key);
+        let mut stream = BufWriter::new(&mut self.log_file);
+        write!(stream, "{}", entry).ok()?;
+        stream.flush().ok()?;
+
+        self.index.remove(key);
+        None
+    }
+
+    fn flush(&self) -> Result<(), std::io::Error> {
+        // Don't need to flush with this implementation
+        Ok(())
+    }
+}
